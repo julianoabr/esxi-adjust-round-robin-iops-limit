@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 #Requires -RunAsAdministrator   
 
 <#
@@ -10,14 +10,6 @@
    Example of how to use this cmdlet
 .EXAMPLE
    Another example of how to use this cmdlet
-.BASE
-   Based on KB:
-   https://kb.vmware.com/s/article/2069356
-   
-   https://kb.vmware.com/s/article/1011340
-
-   https://infohub.delltechnologies.com/l/day-one-best-practices/vmware-esxi-round-robin-path-policy
-
 .AUTHOR
     Juliano Alves de Brito Ribeiro (find me at julianoalvesbr@live.com or https://github.com/julianoabr or https://youtube.com/@powershellchannel)
 .VERSION
@@ -41,16 +33,9 @@ else{
 
 Set-PowerCLIConfiguration -WebOperationTimeoutSeconds 900 -Verbose -Confirm:$false -ErrorAction Continue
 
-$Script:pathOutput = "$env:SystemDrive\Tmp\Vmware\Host\AdjustRoundRobin"
+$Script:pathOutput = "$env:SystemDrive\Temp\Report\"
 
 $currentDate = (Get-Date -Format "ddMMyyyy").ToString()
-
-#DEFINE VCENTER LIST
-$vcServerList = @();
-
-#ADD OR REMOVE VCs        
-$vcServerList = ('vCenter-1','vCenter-2','vCenter-3','vCenter-4','vCenter-4','vCenter-5','vCenter-6') | Sort-Object
-
 
 function Pause-PSScript
 {
@@ -84,7 +69,7 @@ function Connect-ToVcenterServer
         [Parameter(Mandatory=$false,
                    ValueFromPipelineByPropertyName=$true,
                    Position=1)]
-        [ValidateSet('vCenter-1','vCenter-2','vCenter-3','vCenter-4','vCenter-4','vCenter-5','vCenter-6')]
+        [ValidateSet('server1','server2','server3','server4')]
         [System.String]$vCenterToConnect, 
         
         [Parameter(Mandatory=$false,
@@ -93,7 +78,7 @@ function Connect-ToVcenterServer
                 
         [Parameter(Mandatory=$false,
                    Position=3)]
-        [ValidateSet('domain.suffix1','domain.suffix2','domain.suffix3','domain.suffix4')]
+        [ValidateSet('local.domain','local.internal','yourcompany.com','yourmatrix.com')]
         [System.String]$suffix, 
 
         [Parameter(Mandatory=$false,
@@ -137,7 +122,7 @@ function Connect-ToVcenterServer
                 Write-Output "            [$i].- Exit this script ";
 
                 while(!(isNumeric($tmpWorkingLocationNum)) ){
-	                $tmpWorkingLocationNum = Read-Host "Type the number of vCenter that you want to connect"
+	                $tmpWorkingLocationNum = Read-Host "Type Vcenter Number that you want to connect"
                 }#end of while
 
                     $workingLocationNum = ($tmpWorkingLocationNum / 1)
@@ -160,6 +145,102 @@ function Connect-ToVcenterServer
 
 }#End of Function Connect to Vcenter
 
+#DEFINE VCENTER LIST
+$vcServerList = @();
+
+#ADD OR REMOVE VCs        
+$vcServerList = ('server1','server2','server3','server4') | Sort-Object
+
+
+Do
+{
+ 
+        $tmpMethodToConnect = Read-Host -Prompt "Type (Manual) if you want to choose VC to Connect. Type (Automatic) if you want to Type the Name of VC to Connect"
+
+        if ($tmpMethodToConnect -notmatch "^(?:manual\b|automatic\b)"){
+    
+            Write-Host "You typed an invalid word. Type only (manual) or (automatic)" -ForegroundColor White -BackgroundColor Red
+    
+        }
+        else{
+    
+            Write-Host "You typed a valid word. I will continue =D" -ForegroundColor White -BackgroundColor DarkBlue
+    
+        }
+    
+    }While ($tmpMethodToConnect -notmatch "^(?:manual\b|automatic\b)")
+
+
+if ($tmpMethodToConnect -match "^\bautomatic\b$"){
+
+    $tmpSuffix = Read-Host "Write the suffix of VC that you want to connect (host.intranet or uolcloud.intranet)"
+
+    $tmpVC = Read-Host "Write the hostname of VC that you want to connect"
+
+    Connect-ToVcenterServer -vCenterToConnect $tmpVC -suffix $tmpSuffix -methodToConnect Automatic
+
+}
+else{
+
+    Connect-ToVcenterServer -methodToConnect $tmpMethodToConnect -VCServers $vcServerList
+
+}
+
+Write-Output "`n"
+
+Write-Host "SELECT THE CLUSTER THAT YOU WANT TO WORK" -ForegroundColor DarkBlue -BackgroundColor White
+
+Write-Output "`n"
+
+#CREATE CLUSTER LIST
+        $vCClusterList = @()
+        
+        $vCClusterList = (VMware.VimAutomation.Core\Get-Cluster | Select-Object -ExpandProperty Name| Sort-Object)
+
+        $tmpWorkingClusterNum = ""
+        
+        $Script:WorkingCluster = ""
+        
+        $i = 0
+        
+
+        #CREATE CLUSTER MENU LIST
+        foreach ($vCCluster in $vCClusterList){
+	   
+            $vCClusterValue = $vCCluster
+	    
+        Write-Output "            [$i].- $vCClusterValue ";	
+	    
+        $i++	
+        
+        }#end foreach	
+        
+        Write-Output "            [$i].- Exit this script ";
+
+        while(!(isNumeric($tmpWorkingClusterNum)) ){
+	    
+            $tmpWorkingClusterNum = Read-Host "Type the vCenter Cluster Number that you want to Adjust Round Robin"
+        
+        }#end of while
+
+            $workingClusterNum = ($tmpWorkingClusterNum / 1)
+
+        if(($workingClusterNum -ge 0) -and ($workingClusterNum -le ($i-1))  ){
+	        
+            $Script:WorkingCluster = $vCClusterList[$workingClusterNum]
+        }
+        else{
+            
+            Write-Host "Exit selected, or Invalid choice number. End of Script " -ForegroundColor Red -BackgroundColor White
+            
+            Exit;
+        }#end of else
+
+#get all hosts of selected cluster
+$script:allESXiHosts = (VMware.VimAutomation.Core\Get-VMHost -Location $Script:WorkingCluster | Select-Object -ExpandProperty Name | Sort-Object)
+
+#get a single host to get datastores
+$script:singleEsxiHost = ($Script:allESXiHosts | Select-Object -First 1)
 
 function AdjustRRLun-IOPSLimit
 {
@@ -178,7 +259,9 @@ function AdjustRRLun-IOPSLimit
 Do {
 
 [int]$userMenuChoice = 0
+
 $lunlist = ""
+
 $waveToAdjust = ""
 
 #MAIN MENU - WHILE YOU DON'T PRESS 4. IT WILL BACK TO MENU      
@@ -201,11 +284,17 @@ The IOPS Limit value will be adjust to: $IOPSLimitValue
 
         switch ($userMenuChoice){
         1 {
-    
+            
+            Write-Host "O relatório será salvo em: $Script:pathOutput" -ForegroundColor White -BackgroundColor Red
+
             #Datastores
             $dsNameList = @()
-        
-            $dsNameList = (Get-Datastore | Where-Object -FilterScript {$PSItem.ExtensionData.Info.Vmfs.Local -eq $false} | Select-Object -ExpandProperty Name | Sort-Object)
+
+            $dsNameList = (VMware.VimAutomation.Core\Get-Vmhost -Name $singleEsxiHost | Get-Datastore  | Where-Object -FilterScript {($PSItem.ExtensionData.Info.Vmfs.Local -eq $false) -and ($psitem.Name -like 'DS_*')} | Select-Object -ExpandProperty Name | Sort-Object)
+
+            $totalDSList = $dsNameList.Count
+
+            Write-Host "I found: $totalDSList Datastores" -ForegroundColor White -BackgroundColor DarkBlue
 
             $lunNAAList = @()
         
@@ -218,62 +307,9 @@ The IOPS Limit value will be adjust to: $IOPSLimitValue
 
                 $lunNAAList += $dsNAA
                            
-            }
+            }#end of foreach get NAA ID
 
-            [string]$waveToAdjust = Read-Host "Digite a Onda que será ajustada (Exemplo: Onda1)"
-
-            $csvFile = $Script:pathOutput + "\LUNCONFIG-BEFORE-ADJUST-RR-IOPS-$waveToAdjust-$currentDate.csv"
-
-            #Check to see if the file exists, if it does then overwrite it.
-            if (Test-Path $csvfile) {
-    
-                Write-Output "Overwriting $csvfile ..."
-    
-                Start-Sleep -Milliseconds 400
-
-                Remove-Item $csvfile -Confirm -Verbose
-            }  
-
-
-        foreach ($esxiHost in $Script:allESXiHosts){
-    
-            foreach ($lunName in $lunList){
-        
-                Get-ScsiLun -CanonicalName $lunName -VmHost $esxiHost | Select-Object -Property VmHost,CanonicalName,MultipathPolicy,CommandsToSwitchPath | Export-Csv -NoTypeInformation -Path $csvFile -Append -Verbose
-        
-            }#end ForeachLuns
-    
-    
-        }#end ForeachHosts
-
-        explorer $Script:pathOutput
-    
-    }#end of 1
-        2 {
-    
-            #Datastores
-            $dsNameList = @()
-        
-            $dsNameList = (Get-Datastore | Where-Object -FilterScript {$PSItem.ExtensionData.Info.Vmfs.Local -eq $false} | Select-Object -ExpandProperty Name | Sort-Object)
-
-            $lunNAAList = @()
-        
-            foreach ($dsName in $dsNameList)
-            {
-            
-                $dsObj = Get-datastore -Name $dsName
-            
-                $dsNAA = $dsObj.ExtensionData.Info.Vmfs.Extent[0].DiskName
-
-                $lunNAAList += $dsNAA
-                           
-            }
-
-
-
-            [string]$waveToAdjust = Read-Host "Digite a Onda que será ajustada (Exemplo: Onda1)"
-
-            $csvFile = $Script:pathOutput + "\LUNCONFIG-AFTER-ADJUST-RR-IOPS-$waveToAdjust-$currentDate.csv"
+            $csvFile = $Script:pathOutput + "LUNCONFIG-BEFORE-ADJUST-RR-IOPS-$waveToAdjust-$currentDate.csv"
 
             #Check to see if the file exists, if it does then overwrite it.
             if (Test-Path $csvfile) {
@@ -287,14 +323,73 @@ The IOPS Limit value will be adjust to: $IOPSLimitValue
 
 
             foreach ($esxiHost in $Script:allESXiHosts){
-    
-                foreach ($lunName in $lunList){
-        
-                Get-ScsiLun -CanonicalName $lunName -VmHost $esxiHost | Select-Object -Property VmHost,CanonicalName,MultipathPolicy,CommandsToSwitchPath | Export-Csv -NoTypeInformation -Path $csvFile -Append -Verbose
+            
+                $esxiHostObj = Vmware.VimAutomation.Core\Get-VMHost -Name $esxiHost
+               
+                foreach ($lunNAA in $lunNAAList){
+                    
+                    Write-Host "NAA VALUE: $lunNAA" -ForegroundColor White -BackgroundColor DarkGreen
+
+                    Get-ScsiLun -CanonicalName $lunNAA -VmHost $esxiHostObj | Select-Object -Property VmHost,CanonicalName,MultipathPolicy,CommandsToSwitchPath | Export-Csv -NoTypeInformation -Path $csvFile -Append -Verbose
         
                 }#end ForeachLuns
+        
+            }#end ForeachHosts
+
+            explorer $Script:pathOutput
     
+    }#end of 1
+        2 {
+           
+            Write-Host "O relatório será salvo em: $Script:pathOutput" -ForegroundColor White -BackgroundColor Red
+             
+            #Datastores
+            $dsNameList = @()
+
+            $dsNameList = (VMware.VimAutomation.Core\Get-Vmhost -Name $singleEsxiHost | Get-Datastore  | Where-Object -FilterScript {($PSItem.ExtensionData.Info.Vmfs.Local -eq $false) -and ($psitem.Name -like 'DS_*')} | Select-Object -ExpandProperty Name | Sort-Object)
+
+            $totalDSList = $dsNameList.Count
+
+            Write-Host "I found: $totalDSList Datastores" -ForegroundColor White -BackgroundColor DarkBlue
+            
+            $lunNAAList = @()
+        
+            foreach ($dsName in $dsNameList)
+            {
+            
+                $dsObj = Get-datastore -Name $dsName
+            
+                $dsNAA = $dsObj.ExtensionData.Info.Vmfs.Extent[0].DiskName
+
+                $lunNAAList += $dsNAA
+                           
+            }
+            
+            $csvFile = $Script:pathOutput + "LUNCONFIG-AFTER-ADJUST-RR-IOPS-$waveToAdjust-$currentDate.csv"
+
+            #Check to see if the file exists, if it does then overwrite it.
+            if (Test-Path $csvfile) {
     
+                Write-Output "Overwriting $csvfile ..."
+    
+                Start-Sleep -Milliseconds 400
+
+                Remove-Item $csvfile -Confirm -Verbose
+            }  
+
+
+            foreach ($esxiHost in $Script:allESXiHosts){
+
+                $esxiHostObj = Vmware.VimAutomation.Core\Get-VMHost -Name $esxiHost
+    
+                foreach ($lunNAA in $lunNAAList){
+
+                Write-Host "NAA VALUE: $lunNAA" -ForegroundColor White -BackgroundColor DarkGreen
+        
+                Get-ScsiLun -CanonicalName $lunNAA -VmHost $esxiHostObj | Select-Object -Property VmHost,CanonicalName,MultipathPolicy,CommandsToSwitchPath | Export-Csv -NoTypeInformation -Path $csvFile -Append -Verbose
+        
+                }#end ForeachLuns
+        
             }#end ForeachHosts
 
     explorer $Script:pathOutput
@@ -302,10 +397,16 @@ The IOPS Limit value will be adjust to: $IOPSLimitValue
     }#end of 2
         3 {
         
+        Write-Host "Esta opção ajusta o Round Robin para o valor digitado: $intIOPSLimitValue" -ForegroundColor White -BackgroundColor Red
+        
         #Datastores
         $dsNameList = @()
-        
-        $dsNameList = (Get-Datastore | Where-Object -FilterScript {$PSItem.ExtensionData.Info.Vmfs.Local -eq $false} | Select-Object -ExpandProperty Name | Sort-Object)
+
+        $dsNameList = (VMware.VimAutomation.Core\Get-Vmhost -Name $singleEsxiHost | Get-Datastore  | Where-Object -FilterScript {($PSItem.ExtensionData.Info.Vmfs.Local -eq $false) -and ($psitem.Name -like 'DS_*')} | Select-Object -ExpandProperty Name | Sort-Object)
+
+        $totalDSList = $dsNameList.Count
+
+        Write-Host "I found: $totalDSList Datastores" -ForegroundColor White -BackgroundColor DarkBlue
 
         $lunNAAList = @()
         
@@ -320,9 +421,7 @@ The IOPS Limit value will be adjust to: $IOPSLimitValue
             
         }
         
-        [string]$waveToAdjust = Read-Host "Digite a Onda que será ajustada (Exemplo: Onda1)"
-
-        $csvFile = $Script:pathOutput + "\LUNCONFIG-ADJUST-RR-IOPS-$waveToAdjust-$currentDate.csv"
+        $csvFile = $Script:pathOutput + "LUNCONFIG-ADJUST-RR-IOPS-$waveToAdjust-$currentDate.csv"
 
         #Check to see if the file exists, if it does then overwrite it.
         if (Test-Path $csvfile) {
@@ -336,15 +435,15 @@ The IOPS Limit value will be adjust to: $IOPSLimitValue
 
 
         foreach ($esxiHost in $Script:allESXiHosts){
-    
-            foreach ($lunName in $lunList){
+            
+            $esxiHostObj = Vmware.VimAutomation.Core\Get-VMHost -Name $esxiHost
+
+            foreach ($lunNAA in $lunNAAList){
         
-            Get-ScsiLun -CanonicalName $lunName -VmHost $esxiHost | Set-ScsiLun -CommandsToSwitchPath $IOPSLimitValue -Verbose 
-        
-        
+                Get-ScsiLun -CanonicalName $lunNAA -VmHost $esxiHostObj | Set-ScsiLun -CommandsToSwitchPath $IOPSLimitValue -Verbose
+                
             }#end ForeachLuns
-    
-    
+        
         }#end ForeachHosts
 
         explorer $Script:pathOutput
@@ -353,13 +452,13 @@ The IOPS Limit value will be adjust to: $IOPSLimitValue
     }#end of 3
         4 {
     
-    Disconnect-VIServer -Force -Confirm:$false -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
+            Disconnect-VIServer -Force -Confirm:$false -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
 
-    Write-Output "You choose finish the Script"
+            Write-Output "You choose finish the Script"
     
-    Start-Sleep -Seconds 2
+            Start-Sleep -Seconds 2
     
-    Exit
+            Exit
 
 
     }#end of 4
@@ -372,88 +471,11 @@ The IOPS Limit value will be adjust to: $IOPSLimitValue
 
 }#End of Function AdjustRRLun-IOPSLimit
 
-Do
-{
- 
-        $tmpMethodToConnect = Read-Host -Prompt "Type (Manual) if you want to choose vCenter to Connect. Type (Automatic) if you want to Type the Name of vCenter to Connect"
-
-        if ($tmpMethodToConnect -notmatch "^(?:manual\b|automatic\b)"){
-    
-            Write-Host "You typed an invalid word. Type only (manual) or (automatic)" -ForegroundColor White -BackgroundColor Red
-    
-        }
-        else{
-    
-            Write-Host "You typed a valid word. I will continue =D" -ForegroundColor White -BackgroundColor DarkBlue
-    
-        }
-    
-    }While ($tmpMethodToConnect -notmatch "^(?:manual\b|automatic\b)")
-
-
-if ($tmpMethodToConnect -match "^\bautomatic\b$"){
-
-    $tmpSuffix = Read-Host "Type the suffix of vCenter that you want to connect (suffix1.domain or suffix2.domain)"
-
-    $tmpVC = Read-Host "Type the hostname of vCenter that you want to connect"
-
-    Connect-ToVcenterServer -vCenterToConnect $tmpVC -suffix $tmpSuffix -methodToConnect Automatic
-
-}
-else{
-
-    Connect-ToVcenterServer -methodToConnect $tmpMethodToConnect -VCServers $vcServerList
-
-}
-
-Write-Output "`n"
-
-Write-Host "Select the Cluster that you Want to Connect:" -ForegroundColor DarkBlue -BackgroundColor White
-
-Write-Output "`n"
-
-#CREATE CLUSTER LIST
-$VCClusterList = (Get-Cluster | Select-Object -ExpandProperty Name| Sort-Object)
-
-$tmpWorkingClusterNum = ""
-        
-$WorkingCluster = ""
-        
-$i = 0
-        
-
-#CREATE CLUSTER MENU LIST
-    foreach ($VCCluster in $VCClusterList){
-	   
-        $VCClusterValue = $VCCluster
-	    
-        Write-Output "            [$i].- $VCClusterValue ";	
-	    $i++	
-        
-        }#end foreach	
-        
-        Write-Output "            [$i].- Exit this script ";
-
-        while(!(isNumeric($tmpWorkingClusterNum)) ){
-	        $tmpWorkingClusterNum = Read-Host "Type vCenter Cluster Number that you want to Adjust Round Robin"
-        }#end of while
-
-            $workingClusterNum = ($tmpWorkingClusterNum / 1)
-
-        if(($workingClusterNum -ge 0) -and ($workingClusterNum -le ($i-1))  ){
-	        $Script:WorkingCluster = $vcClusterList[$workingClusterNum]
-        }
-        else{
-            
-            Write-Host "Exit selected, or Invalid choice number. End of Script " -ForegroundColor Red -BackgroundColor White
-            
-            Exit;
-        }#end of else
-
-$script:allESXiHosts = Get-VMHost -Location $Script:WorkingCluster | Select-Object -ExpandProperty Name | Sort-Object
 
 $tmpIOPSLimitValue = Read-Host "Digite um valor para ajustar o IOPS Limits (Range aceito: 1 a 1000)" 
 
 $intIOPSLimitValue = ($tmpIOPSLimitValue / 1)
+
+[System.String]$Script:waveToAdjust = Read-Host "Digite o número ou o nome da onda que será ajustada (Exemplo: Onda1, CH-156)"
 
 AdjustRRLun-IOPSLimit -IOPSLimitValue $intIOPSLimitValue
