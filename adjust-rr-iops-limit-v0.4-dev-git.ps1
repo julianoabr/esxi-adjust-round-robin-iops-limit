@@ -51,7 +51,7 @@ else{
 
 Set-PowerCLIConfiguration -WebOperationTimeoutSeconds 900 -Verbose -Confirm:$false -ErrorAction Continue
 
-$Script:pathOutput = "V:\BOX\PROCESS\VMware\Host\AdjustRoundRobin\Report\"
+$Script:pathOutput = "$env:systemdrive\temp\report\"
 
 $currentDate = (Get-Date -Format "ddMMyyyy").ToString()
 
@@ -607,5 +607,6 @@ $script:allESXiHosts = (VMware.VimAutomation.Core\Get-VMHost -Location $workingC
 $tmpIOPSLimitValue = Read-Host "Digite um valor para ajustar o IOPS Limits (Range aceito: 1 a 1000)" 
 
 $intIOPSLimitValue = ($tmpIOPSLimitValue / 1)
+
 
 AdjustRRLun-IOPSLimit -IOPSLimitValue $intIOPSLimitValue
