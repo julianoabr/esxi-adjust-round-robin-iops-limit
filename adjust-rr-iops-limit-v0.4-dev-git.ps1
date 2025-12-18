@@ -334,7 +334,7 @@ The IOPS Limit value will be adjust to: $IOPSLimitValue if necessary
 
                 Write-Host "I found: $totalDSList Datastores" -ForegroundColor White -BackgroundColor DarkBlue
 
-                Pause-PSScript
+                #Pause-PSScript
 
                 $lunNAAList = @()
         
@@ -396,7 +396,7 @@ The IOPS Limit value will be adjust to: $IOPSLimitValue if necessary
 
                 Write-Host "I found: $totalDSList Datastores" -ForegroundColor White -BackgroundColor DarkBlue
 
-                Pause-PSScript
+                #Pause-PSScript
             
                 $lunNAAList = @()
         
@@ -457,7 +457,7 @@ The IOPS Limit value will be adjust to: $IOPSLimitValue if necessary
 
             Write-Host "I found: $totalDSList Datastores" -ForegroundColor White -BackgroundColor DarkBlue
 
-            Pause-PSScript
+            #Pause-PSScript
 
             $lunNAAList = @()
         
@@ -610,3 +610,4 @@ $intIOPSLimitValue = ($tmpIOPSLimitValue / 1)
 
 
 AdjustRRLun-IOPSLimit -IOPSLimitValue $intIOPSLimitValue
+
